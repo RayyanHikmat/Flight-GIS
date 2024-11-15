@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Animation with Timing Dashboard</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.123/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.123/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <style>
+        #cesiumContainer {
+            width: 100%;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+        #dashboard {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            z-index: 1;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    <div id="dashboard">
+        <div>Elapsed Time: <span id="elapsedTime">0</span> s</div>
+        <div>Remaining Time: <span id="remainingTime">0</span> s</div>
+    </div>
+    <script>
+        const viewer = new Cesium.Viewer('cesiumContainer');
+
+   
+        const delhi = { longitude: 77.1025, latitude: 28.7041, altitude: 0 }; 
+        const bengaluru = { longitude: 77.5946, latitude: 12.9716, altitude: 0 }; 
+
+     
+        function generateFlightPath(start, end, height, segments) {
+            const points = [];
+            for (let i = 0; i <= segments; i++) {
+                const t = i / segments;
+                const lon = Cesium.Math.lerp(start.longitude, end.longitude, t);
+                const lat = Cesium.Math.lerp(start.latitude, end.latitude, t);
+                const alt = height * Math.sin(Math.PI * t); 
+                points.push(Cesium.Cartesian3.fromDegrees(lon, lat, alt));
+            }
+            return points;
+        }
+
+        const flightPathPositions = generateFlightPath(delhi, bengaluru, 50000, 100);
+
+        
+        viewer.entities.add({
+            polyline: {
+                positions: flightPathPositions,
+                width: 5,
+                material: Cesium.Color.BLUE,
+            },
+        });
+
+    
+        const airplane = viewer.entities.add({
+            position: flightPathPositions[0], 
+            model: {
+                uri: 'https://cesium.com/downloads/cesiumjs/releases/1.123/Apps/SampleData/models/CesiumAir/Cesium_Air.glb',
+                minimumPixelSize: 64,
+            },
+        });
+
+        const start = Cesium.JulianDate.now();
+        const stop = Cesium.JulianDate.addSeconds(start, 10, new Cesium.JulianDate()); 
+
+        viewer.clock.startTime = start.clone();
+        viewer.clock.stopTime = stop.clone();
+        viewer.clock.currentTime = start.clone();
+        viewer.clock.clockRange = Cesium.ClockRange.CLAMPED; 
+        viewer.clock.multiplier = 1; 
+
+        const positionProperty = new Cesium.SampledPositionProperty();
+
+        flightPathPositions.forEach((position, index) => {
+            const time = Cesium.JulianDate.addSeconds(start, (index / flightPathPositions.length) * 10, new Cesium.JulianDate());
+            positionProperty.addSample(time, position);
+        });
+
+        airplane.position = positionProperty;
+
+      
+        airplane.orientation = new Cesium.VelocityOrientationProperty(positionProperty);
+
+        
+        viewer.trackedEntity = airplane;
+
+       
+        viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(delhi.longitude, delhi.latitude),
+            point: { pixelSize: 10, color: Cesium.Color.RED },
+            label: { text: "Delhi", font: "14pt sans-serif", verticalOrigin: Cesium.VerticalOrigin.BOTTOM },
+        });
+
+        viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(bengaluru.longitude, bengaluru.latitude),
+            point: { pixelSize: 10, color: Cesium.Color.GREEN },
+            label: { text: "Bengaluru", font: "14pt sans-serif", verticalOrigin: Cesium.VerticalOrigin.BOTTOM },
+        });
+
+     
+        viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(
+                (delhi.longitude + bengaluru.longitude) / 2,
+                (delhi.latitude + bengaluru.latitude) / 2,
+                5000000
+            ),
+            duration: 3, 
+        });
+
+      
+        const elapsedTimeElement = document.getElementById('elapsedTime');
+        const remainingTimeElement = document.getElementById('remainingTime');
+
+
+        viewer.clock.onTick.addEventListener(function (clock) {
+            const currentTime = viewer.clock.currentTime;
+            const elapsedTime = Cesium.JulianDate.secondsDifference(currentTime, start);
+            const remainingTime = Cesium.JulianDate.secondsDifference(stop, currentTime);
+
+            elapsedTimeElement.textContent = elapsedTime.toFixed(1);
+            remainingTimeElement.textContent = Math.max(remainingTime, 0).toFixed(1); 
+        });
+    </script>
+</body>
+</html>
